@@ -166,7 +166,10 @@ To evaluate the model with a specific architecture (e.g. search-XS), please use 
 ```
 python valid.py --cfg experiments/crowd_pose/mobilenet/mobile.yaml --superconfig mobile_configs/search-XS.json TEST.MODEL_FILE your_checkpoint_path
 ```
-
+For running inference on custom images, choose an image directory and set the print frequency to 1:
+```
+python valid.py --cfg experiments/crowd_pose/mobilenet/mobile.yaml --superconfig mobile_configs/search-XS.json TEST.MODEL_FILE checkpoints/LitePose-Auto-XS_crowd.pth.tar DATASET.DATASET_TEST image_dir DATASET.ROOT dataset/my_img/ PRINT_FREQ 1
+```
 ### Models
 
 #### Pre-trained Models

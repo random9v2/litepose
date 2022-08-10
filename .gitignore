@@ -1,0 +1,12 @@
+# Folders
+/checkpoints
+/output
+/dataset
+
+# Compiled / optimized / DLL / OS / temporary files
+__pycache__
+*.py[cod]
+*.DS_Store
+
+# PyCharm
+.idea

@@ -48,6 +48,8 @@ from arch_manager import ArchManager
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
+# cpu, cuda, mps
+DEVICE = 'cpu'
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Test keypoints network')
@@ -154,19 +156,20 @@ def main():
 
     if cfg.TEST.MODEL_FILE:
         logger.info('=> loading model from {}'.format(cfg.TEST.MODEL_FILE))
-        model.load_state_dict(torch.load(cfg.TEST.MODEL_FILE), strict=True)
+        model.load_state_dict(torch.load(cfg.TEST.MODEL_FILE, map_location=torch.device(DEVICE)), strict=True)
     else:
         model_state_file = os.path.join(
             final_output_dir, 'model_best.pth.tar'
         )
         logger.info('=> loading model from {}'.format(model_state_file))
-        model.load_state_dict(torch.load(model_state_file))
+        model.load_state_dict(torch.load(model_state_file, map_location=torch.device(DEVICE)))
 
-    model = torch.nn.DataParallel(model, device_ids=cfg.GPUS).cuda()
+    if torch.cuda.is_available() or DEVICE == 'cuda':
+        model = torch.nn.DataParallel(model, device_ids=cfg.GPUS).cuda()
 
     data_loader, test_dataset = make_test_dataloader(cfg)
 
-    train_data_loader, train_dataset = make_train_dataloader(cfg)
+    # train_data_loader, train_dataset = make_train_dataloader(cfg)
 
     if cfg.MODEL.NAME == 'pose_hourglass':
         transforms = torchvision.transforms.Compose(
@@ -192,7 +195,13 @@ def main():
     pbar = tqdm(total=len(test_dataset)) if cfg.TEST.LOG_PROGRESS else None
     #eval mode
     model.eval()
-    for i, (images, annos) in enumerate(data_loader):
+    for i, data in enumerate(data_loader):
+        if len(data) == 2:
+            # e.g. COCO dataloader
+            images, annotations = data
+        else:
+            # e.g. image only loader
+            images = data
         assert 1 == images.size(0), 'Test batch size should be 1'
         image = images[0].cpu().numpy()
         # size at scale 1.0
@@ -210,7 +219,7 @@ def main():
                     image, input_size, s, min(cfg.TEST.SCALE_FACTOR)
                 )
                 image_resized = transforms(image_resized)
-                image_resized = image_resized.unsqueeze(0).cuda()
+                image_resized = image_resized.unsqueeze(0).to(DEVICE)
 
                 outputs, heatmaps, tags = get_multi_stage_outputs(
                     cfg, model, image_resized, cfg.TEST.FLIP_TEST,
@@ -238,8 +247,9 @@ def main():
 
         if i % cfg.PRINT_FREQ == 0:
             print("finish images: {}".format(i))
-            # prefix = '{}_{}'.format(os.path.join(final_output_dir, 'result_valid'), i)
-            # save_valid_image(image, final_results, '{}.jpg'.format(prefix), dataset=test_dataset.name)
+            prefix = '{}_{}'.format(os.path.join(final_output_dir, 'result_valid'), i)
+            dataset_name = 'COCO' if cfg.DATASET.DATASET == 'coco_kpt' else 'CROWDPOSE'
+            save_valid_image(image, final_results, '{}.jpg'.format(prefix), dataset=dataset_name)
 
         all_preds.append(final_results)
         all_scores.append(scores)
@@ -247,15 +257,16 @@ def main():
     if cfg.TEST.LOG_PROGRESS:
         pbar.close()
 
-    name_values, _ = test_dataset.evaluate(
-        cfg, all_preds, all_scores, final_output_dir
-    )
+    if cfg.DATASET.DATASET_TEST == 'coco' or cfg.DATASET.DATASET == 'crowd_pose':
+        name_values, _ = test_dataset.evaluate(
+            cfg, all_preds, all_scores, final_output_dir
+        )
 
-    if isinstance(name_values, list):
-        for name_value in name_values:
-            _print_name_value(logger, name_value, cfg.MODEL.NAME)
-    else:
-        _print_name_value(logger, name_values, cfg.MODEL.NAME)
+        if isinstance(name_values, list):
+            for name_value in name_values:
+                _print_name_value(logger, name_value, cfg.MODEL.NAME)
+        else:
+            _print_name_value(logger, name_values, cfg.MODEL.NAME)
 
 
 if __name__ == '__main__':
