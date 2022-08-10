@@ -49,7 +49,7 @@ from arch_manager import ArchManager
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # cpu, cuda, mps
-DEVICE = 'cpu'
+DEVICE = 'cuda'
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Test keypoints network')
